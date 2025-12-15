@@ -9,7 +9,6 @@
   
   # The base directory where Netlify should start the build.
   # We point it directly at the frontend folder.
-  base = "frontend"
 
 # We must add a minimal redirection rule to fix any potential 404 issues 
 # when loading assets like /lib/ethers.min.js
