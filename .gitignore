@@ -1,0 +1,12 @@
+# Dependencies
+/node_modules
+
+# Compilation
+/artifacts
+/cache
+
+# Environment
+.env
+
+# Logs and local
+npm-debug.log

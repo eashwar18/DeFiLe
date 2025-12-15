@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeFiLe - Sepolia Testnet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.cdnfonts.com/css/geometria');
+    
+    * {
+      font-family: 'Geometria', 'Geometric', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.5; }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animate-fadeIn {
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    .grid-bg {
+      background-image: radial-gradient(circle, rgba(139, 92, 246, 0.5) 1.5px, transparent 1.5px);
+      background-size: 40px 40px;
+      animation: pulse 4s ease-in-out infinite;
+    }
+  </style>
+  <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script>
+    // --- THIS IS THE CRITICAL WRAPPER TO ENSURE Ethers IS DEFINED ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // We use pure JS/JSX inside a standard script tag, relying on React's development environment.
+        // If this still fails, you MUST compile your JSX/Hooks to pure JS offline.
+        
+        const { useState, useEffect, useCallback } = React;
+        
+        // --- WEB3 CONSTANTS ---
+        // !!! CRITICAL: REPLACE THIS WITH YOUR DEPLOYED CONTRACT ADDRESS !!!
+        const CONTRACT_ADDRESS = '0xc35Fc9F9c1709126c9AfeD2Ce17BC66e90AB83BB'; 
+
+        // ABI derived from your DeFiLe.sol contract
+        const CONTRACT_ABI = [
+            "function deposit() payable",
+            "function borrow(uint256 amount) external",
+            "function repayLoan() payable",
+            "function enableAutoRepayment(uint256 percentage) external",
+            "function getUserBalance(address user) external view returns (uint256)",
+            "function getUserLoan(address user) external view returns (uint256 amount, bool isActive, bool autoRepayEnabled, uint256 repaymentPercentage)",
+            "function getContractBalance() external view returns (uint256)",
+            "fallback() payable"
+        ];
+        // --- END WEB3 CONSTANTS ---
+
+        // Lucide icons as SVG components
+        const Wallet = () => (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+          </svg>
+        );
+        const TrendingUp = () => (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+        );
+        const DollarSign = () => (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+        const Send = () => (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        );
+        const Info = () => (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+
+        function DeFiLendingPlatform() {
+          const [activeTab, setActiveTab] = useState('lend');
+          const [isConnected, setIsConnected] = useState(false);
+          const [account, setAccount] = useState('0x...');
+          const [ethBalance, setEthBalance] = useState('0.00');
+
+          // Web3 States
+          const [provider, setProvider] = useState(null);
+          const [signer, setSigner] = useState(null);
+          const [contract, setContract] = useState(null);
+          
+          // Contract state (live data)
+          const [totalPoolBalance, setTotalPoolBalance] = useState('0.00');
+          const [totalBorrowed] = useState('12,850.25'); 
+          const [availableLiquidity] = useState('12,580.25'); 
+          const [userDeposit, setUserDeposit] = useState('0.00');
+          
+          // Form states
+          const [depositAmount, setDepositAmount] = useState('');
+          const [borrowAmount, setBorrowAmount] = useState('');
+          const [repayAmount, setRepayAmount] = useState('');
+          const [sendRecipient, setSendRecipient] = useState('');
+          const [sendAmount, setSendAmount] = useState('');
+          const [interceptionRate, setInterceptionRate] = useState(50);
+          const [status, setStatus] = useState('');
+          const [hasActiveLoan, setHasActiveLoan] = useState(false);
+
+          const [loanInfo, setLoanInfo] = useState({
+            principal: '0.00',
+            currentDebt: '0.00', 
+            collateral: '0.00',
+            autoRepayEnabled: false,
+            repaymentPercentage: 0
+          });
+
+          const dockItems = [
+            { title: 'Lend', icon: <TrendingUp />, tab: 'lend' },
+            { title: 'Borrow', icon: <DollarSign />, tab: 'borrow' },
+            { title: 'Send', icon: <Send />, tab: 'send' },
+          ];
+
+          // Helper function to update all relevant UI data
+          const fetchData = useCallback(async (contractInstance, userAddress) => {
+            if (!contractInstance || !userAddress) return;
+            
+            try {
+              // Fetch Contract Pool Balance
+              const poolBalanceWei = await contractInstance.getContractBalance();
+              setTotalPoolBalance(ethers.utils.formatEther(poolBalanceWei));
+
+              // Fetch User Deposit Balance
+              const userBalanceWei = await contractInstance.getUserBalance(userAddress);
+              const userBalanceEth = ethers.utils.formatEther(userBalanceWei);
+              setUserDeposit(parseFloat(userBalanceEth).toFixed(2));
+
+              // Fetch User Loan Info
+              const [amount, isActive, autoRepayEnabled, repaymentPercentage] = await contractInstance.getUserLoan(userAddress);
+              const loanAmountEth = ethers.utils.formatEther(amount);
+              
+              setHasActiveLoan(isActive);
+              setInterceptionRate(repaymentPercentage);
+              setLoanInfo({
+                principal: parseFloat(loanAmountEth).toFixed(2),
+                currentDebt: parseFloat(loanAmountEth).toFixed(2), 
+                collateral: (parseFloat(userBalanceEth) * 0.7).toFixed(2), 
+                autoRepayEnabled: autoRepayEnabled,
+                repaymentPercentage: repaymentPercentage
+              });
+
+            } catch (error) {
+              console.error("Error fetching data:", error);
+              setStatus('Failed to fetch contract data.');
+            }
+          }, []);
+
+          // --- WEB3 CONNECTION LOGIC ---
+          const connectWallet = async () => {
+            try {
+              // Check for window.ethereum (MetaMask)
+              if (!window.ethereum) {
+                setStatus('MetaMask is not installed or not detected. Please install and run HTML via a local server (e.g., http://).');
+                return;
+              }
+              
+              const newProvider = new ethers.providers.Web3Provider(window.ethereum);
+              setProvider(newProvider);
+
+              // Request account access and get signer
+              const accounts = await newProvider.send("eth_requestAccounts", []);
+              const userAddress = accounts[0];
+              const newSigner = newProvider.getSigner();
+              setSigner(newSigner);
+              setAccount(`${userAddress.substring(0, 6)}...${userAddress.substring(userAddress.length - 4)}`);
+              setIsConnected(true);
+
+              // Initialize contract instance
+              const contractInstance = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, newSigner);
+              setContract(contractInstance);
+
+              // Fetch ETH Balance
+              const balanceWei = await newProvider.getBalance(userAddress);
+              const balanceEth = ethers.utils.formatEther(balanceWei);
+              setEthBalance(parseFloat(balanceEth).toFixed(4));
+              
+              // Fetch contract and user specific data
+              fetchData(contractInstance, userAddress);
+              
+              setStatus(`Wallet connected: ${userAddress.substring(0, 6)}...`);
+
+            } catch (error) {
+              console.error("Connection failed:", error);
+              // The error is often in the `error.message` when Metamask is present
+              setStatus(`Connection failed: ${error.message || 'Check console.'}`);
+            }
+          };
+
+          // --- WEB3 TRANSACTION HANDLER ---
+          const handleTransaction = async (txPromise, successMessage) => {
+            if (!isConnected || !contract || !signer) {
+              setStatus('Please connect your wallet first.');
+              return;
+            }
+            try {
+              setStatus('Transaction pending...');
+              const tx = await txPromise;
+              const receipt = await tx.wait();
+              setStatus(`${successMessage} Transaction confirmed! Hash: ${receipt.transactionHash.substring(0, 10)}...`);
+              // Re-fetch data after transaction
+              const userAddress = await signer.getAddress();
+              fetchData(contract, userAddress);
+
+            } catch (error) {
+              console.error("Transaction failed:", error);
+              setStatus(`Transaction failed. Error: ${error.reason || error.message.substring(0, 50) + '...'}`);
+            }
+            setTimeout(() => setStatus(''), 7000);
+          };
+
+          // --- WEB3 TRANSACTION LOGIC ---
+          const handleDeposit = async () => {
+            const amount = parseFloat(depositAmount);
+            if (isNaN(amount) || amount <= 0) {
+              setStatus('Please enter a valid deposit amount.');
+              return;
+            }
+
+            const txPromise = contract.deposit({
+              value: ethers.utils.parseEther(depositAmount)
+            });
+            
+            await handleTransaction(txPromise, 'Deposit successful!');
+            setDepositAmount('');
+          };
+
+          const handleBorrow = async () => {
+            const amount = parseFloat(borrowAmount);
+            if (isNaN(amount) || amount <= 0) {
+              setStatus('Please enter a valid borrow amount.');
+              return;
+            }
+            
+            const txPromise = contract.borrow(ethers.utils.parseEther(borrowAmount));
+            
+            await handleTransaction(txPromise, 'Borrow request sent!');
+            setBorrowAmount('');
+          };
+
+          const handleRepay = async () => {
+            const amount = parseFloat(repayAmount);
+            if (isNaN(amount) || amount <= 0) {
+              setStatus('Please enter a valid repayment amount.');
+              return;
+            }
+
+            const txPromise = contract.repayLoan({
+              value: ethers.utils.parseEther(repayAmount)
+            });
+            
+            await handleTransaction(txPromise, 'Repayment successful!');
+            setRepayAmount('');
+          };
+
+          const handleUpdateRate = async () => {
+            const rate = parseInt(interceptionRate);
+            if (isNaN(rate) || rate < 1 || rate > 100) {
+              setStatus('Percentage must be between 1 and 100.');
+              return;
+            }
+
+            const txPromise = contract.enableAutoRepayment(rate);
+            
+            await handleTransaction(txPromise, `Auto-Repay Rate updated to ${rate}%!`);
+          };
+
+          const handleSendPayment = async () => {
+            const amount = parseFloat(sendAmount);
+            if (isNaN(amount) || amount <= 0 || !ethers.utils.isAddress(sendRecipient)) {
+              setStatus('Please enter a valid amount and recipient address.');
+              return;
+            }
+
+            // We use sendTransaction to send ETH to the contract with the recipient address 
+            // as calldata, triggering the fallback() logic in DeFiLe.sol.
+            const tx = {
+                to: CONTRACT_ADDRESS,
+                value: ethers.utils.parseEther(sendAmount),
+                data: sendRecipient // Recipient address as calldata
+            };
+
+            const txPromise = signer.sendTransaction(tx);
+            
+            await handleTransaction(txPromise, 'Payment sent and auto-repay checked!');
+            setSendAmount('');
+            setSendRecipient('');
+          };
+
+          // Fetch data on component load and when connected state changes
+          useEffect(() => {
+              if (isConnected && contract && signer) {
+                  signer.getAddress().then(address => fetchData(contract, address));
+              }
+          }, [isConnected, contract, signer, fetchData]);
+
+
+          return (
+            <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
+              {/* Background */}
+              <div className="absolute inset-0">
+                <div 
+                  className="absolute inset-0 opacity-40"
+                  style={{
+                    backgroundImage: `
+                      radial-gradient(circle at 20% 50%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                      radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%),
+                      radial-gradient(circle at 40% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%)
+                    `
+                  }}
+                />
+                <div className="absolute inset-0 opacity-30 grid-bg" />
+              </div>
+
+              {/* Header */}
+              <header className="relative z-10 border-b border-purple-500/20 backdrop-blur-sm bg-slate-900/30">
+                <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                      DeFiLe
+                    </h1>
+                  </div>
+                  
+                  <div className="flex items-center space-x-4">
+                    {isConnected ? (
+                      <div className="flex items-center space-x-3 bg-purple-500/10 border border-purple-500/30 px-4 py-2 rounded-lg backdrop-blur-sm">
+                        <div>
+                          <p className="text-xs text-gray-400">Connected</p>
+                          <p className="text-sm font-mono">{account}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-400">Balance</p>
+                          <p className="text-sm font-semibold">{ethBalance} SepoliaETH</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={connectWallet}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-2 rounded-lg font-semibold hover:shadow-lg hover:shadow-purple-500/50 transition flex items-center space-x-2"
+                      >
+                        <Wallet />
+                        <span>Connect Wallet</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </header>
+
+              {/* Stats Dashboard */}
+              <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                  <div className="bg-green-500/10 backdrop-blur-md border border-green-500/30 rounded-xl p-6 hover:bg-green-500/20 transition">
+                    <p className="text-sm text-gray-400 mb-2">Total Pool Balance</p>
+                    <p className="text-3xl font-bold">{totalPoolBalance} ETH</p>
+                  </div>
+                  <div className="bg-green-500/10 backdrop-blur-md border border-green-500/30 rounded-xl p-6 hover:bg-green-500/20 transition">
+                    <p className="text-sm text-gray-400 mb-2">Total Borrowed</p>
+                    <p className="text-3xl font-bold">{totalBorrowed} ETH</p>
+                  </div>
+                  <div className="bg-green-500/10 backdrop-blur-md border border-green-500/30 rounded-xl p-6 hover:bg-green-500/20 transition">
+                    <p className="text-sm text-gray-400 mb-2">Available Liquidity</p>
+                    <p className="text-3xl font-bold">{availableLiquidity} ETH</p>
+                  </div>
+                  <div className="bg-green-500/10 backdrop-blur-md border border-green-500/30 rounded-xl p-6 hover:bg-green-500/20 transition">
+                    <p className="text-sm text-gray-400 mb-2">Your Deposits</p>
+                    <p className="text-3xl font-bold">{userDeposit} ETH</p>
+                  </div>
+                </div>
+
+                {/* Status Message */}
+                {status && (
+                  <div className="mb-4 p-4 bg-purple-500/20 border border-purple-500/30 rounded-lg backdrop-blur-sm animate-fadeIn">
+                    <p className="text-center">{status}</p>
+                  </div>
+                )}
+
+                {/* Main Content */}
+                <div className="bg-slate-900/50 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-8 shadow-2xl min-h-[600px]">
+                  {activeTab === 'lend' && (
+                    <div className="animate-fadeIn">
+                      <h2 className="text-3xl font-bold mb-6">Lend & Earn</h2>
+                      <p className="text-gray-400 mb-8">Deposit ETH and earn interest. Withdraw anytime, subject to pool liquidity.</p>
+                      
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Deposit Amount (ETH)</label>
+                          <input
+                            type="number"
+                            value={depositAmount}
+                            onChange={(e) => setDepositAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full bg-slate-800/50 border border-purple-500/30 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500 text-white"
+                          />
+                        </div>
+                        
+                        <button
+                          onClick={handleDeposit}
+                          disabled={!isConnected}
+                          className={`w-full py-3 rounded-lg font-semibold transition ${isConnected ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg hover:shadow-purple-500/50' : 'bg-slate-600/50 cursor-not-allowed'}`}
+                        >
+                          Deposit
+                        </button>
+
+                        <div className="mt-8 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <Info />
+                            <div className="text-sm text-gray-300">
+                              <p className="font-semibold mb-1">Contract Info:</p>
+                              <p>Interest Rate: 5% APY (from Solidity)</p>
+                              <p>Collateral Ratio: 70% LTV (from Solidity)</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mt-6">
+                          <div className="p-4 bg-slate-800/30 rounded-lg">
+                            <p className="text-xs text-gray-400 mb-1">Your Deposits</p>
+                            <p className="text-2xl font-bold text-purple-400">{userDeposit} ETH</p>
+                          </div>
+                          <div className="p-4 bg-slate-800/30 rounded-lg">
+                            <p className="text-xs text-gray-400 mb-1">Interest Earned</p>
+                            <p className="text-2xl font-bold text-green-400">~0.00 ETH</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'borrow' && (
+                    <div className="animate-fadeIn">
+                      <h2 className="text-3xl font-bold mb-6">Borrow Funds</h2>
+                      <p className="text-gray-400 mb-8">Borrow ETH against your deposit. Max LTV: 70%.</p>
+                      
+                      {hasActiveLoan ? (
+                        <div className="space-y-6">
+                          <div className="p-6 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                            <h3 className="text-xl font-bold mb-4">Active Loan</h3>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <p className="text-gray-400">Principal</p>
+                                <p className="text-lg font-semibold">{loanInfo.principal} ETH</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-400">Current Debt</p>
+                                <p className="text-lg font-semibold text-red-400">{loanInfo.currentDebt} ETH</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-400">Collateral</p>
+                                <p className="text-lg font-semibold">{loanInfo.collateral} ETH</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-400">Auto-Repay Rate</p>
+                                <p className="text-lg font-semibold text-green-400">{loanInfo.repaymentPercentage}%</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Repayment Amount (ETH)</label>
+                            <input
+                              type="number"
+                              value={repayAmount}
+                              onChange={(e) => setRepayAmount(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full bg-slate-800/50 border border-purple-500/30 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500 text-white"
+                            />
+                          </div>
+                          
+                          <button
+                            onClick={handleRepay}
+                            disabled={!isConnected}
+                            className={`w-full py-3 rounded-lg font-semibold transition ${isConnected ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:shadow-lg' : 'bg-slate-600/50 cursor-not-allowed'}`}
+                          >
+                            Repay Loan
+                          </button>
+
+                          <div>
+                            <label className="block text-sm font-medium mb-2">
+                              Auto-Repay Rate: {interceptionRate}%
+                            </label>
+                            <input
+                              type="range"
+                              min="1"
+                              max="100"
+                              value={interceptionRate}
+                              onChange={(e) => setInterceptionRate(parseInt(e.target.value))}
+                              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                              style={{accentColor: '#a855f7'}}
+                            />
+                            <div className="flex justify-between text-xs text-gray-400 mt-1">
+                              <span>1% - Max money now</span>
+                              <span>100% - Fastest repayment</span>
+                            </div>
+                            <button
+                              onClick={handleUpdateRate}
+                              disabled={!isConnected}
+                              className={`mt-3 w-full py-2 rounded-lg text-sm transition ${isConnected ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-700/50 cursor-not-allowed'}`}
+                            >
+                              Update Rate
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => setHasActiveLoan(false)} // This is still UI-only
+                            className="w-full bg-slate-700 py-2 rounded-lg text-sm hover:bg-slate-600 transition"
+                          >
+                            View New Loan Form
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Borrow Amount (ETH)</label>
+                            <input
+                              type="number"
+                              value={borrowAmount}
+                              onChange={(e) => setBorrowAmount(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full bg-slate-800/50 border border-purple-500/30 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500 text-white"
+                            />
+                            {borrowAmount && (
+                              <p className="text-sm text-gray-400 mt-2">
+                                Required deposit for 70% LTV: {(parseFloat(borrowAmount) * (100 / 70)).toFixed(2)} ETH
+                              </p>
+                            )}
+                          </div>
+                          
+                          <button
+                            onClick={handleBorrow}
+                            disabled={!isConnected}
+                            className={`w-full py-3 rounded-lg font-semibold transition ${isConnected ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg hover:shadow-purple-500/50' : 'bg-slate-600/50 cursor-not-allowed'}`}
+                          >
+                            Borrow
+                          </button>
+
+                          <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                            <div className="flex items-start space-x-2">
+                              <Info />
+                              <div className="text-sm text-gray-300">
+                                <p className="font-semibold mb-1">Loan Terms (from contract):</p>
+                                <ul className="list-disc list-inside space-y-1">
+                                  <li>70% Loan-to-Value (LTV)</li>
+                                  <li>5% Annual Interest Rate</li>
+                                  <li>Auto-repay from incoming payments via fallback</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'send' && (
+                    <div className="animate-fadeIn">
+                      <h2 className="text-3xl font-bold mb-6">Send Payment</h2>
+                      <p className="text-gray-400 mb-8">Send ETH to recipients via the contract. Auto-repays their loans if enabled.</p>
+                      
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Recipient Address</label>
+                          <input
+                            type="text"
+                            value={sendRecipient}
+                            onChange={(e) => setSendRecipient(e.target.value)}
+                            placeholder="0x..."
+                            className="w-full bg-slate-800/50 border border-purple-500/30 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500 font-mono text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Amount (ETH)</label>
+                          <input
+                            type="number"
+                            value={sendAmount}
+                            onChange={(e) => setSendAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full bg-slate-800/50 border border-purple-500/30 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500 text-white"
+                          />
+                        </div>
+                        
+                        <button
+                          onClick={handleSendPayment}
+                          disabled={!isConnected}
+                          className={`w-full py-3 rounded-lg font-semibold transition ${isConnected ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg hover:shadow-purple-500/50' : 'bg-slate-600/50 cursor-not-allowed'}`}
+                        >
+                          Send Payment
+                        </button>
+
+                        <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <Info />
+                            <div className="text-sm text-gray-300">
+                              <p className="font-semibold mb-1">How It Works:</p>
+                              <p className="mb-2">Your payment goes to the contract. If the **recipient** has auto-repay enabled:</p>
+                              <ul className="list-disc list-inside space-y-1">
+                                <li>Their configured % is automatically repaid to their loan.</li>
+                                <li>Recipient receives the remaining amount.</li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Floating Dock */}
+              <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50">
+                <div className="flex space-x-2 bg-slate-900/90 backdrop-blur-xl border border-purple-500/40 rounded-full p-2 shadow-2xl">
+                  {dockItems.map((item) => (
+                    <button
+                      key={item.tab}
+                      onClick={() => setActiveTab(item.tab)}
+                      className={`flex items-center space-x-2 px-6 py-3 rounded-full transition-all duration-300 ${
+                        activeTab === item.tab 
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-500 shadow-lg scale-110' 
+                          : 'bg-slate-800/50 hover:bg-slate-700/50'
+                      }`}
+                    >
+                      {item.icon}
+                      <span className="font-semibold">{item.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // --- REACT 18 COMPATIBLE RENDER (Removes Warning) ---
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<DeFiLendingPlatform />);
+    });
+  </script>
+</body>
+</html>
