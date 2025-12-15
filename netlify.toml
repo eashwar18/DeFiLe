@@ -1,6 +1,6 @@
 [build]
   # We explicitly set the publish directory to the frontend folder.
-  publish = "frontend"
+  publish = "."
   
   # We set a dummy build command that doesn't run npm install.
   # This skips the Hardhat dependency installation which causes ERESOLVE errors.
