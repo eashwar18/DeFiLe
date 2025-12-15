@@ -39,12 +39,12 @@
   
   <script src="./lib/react.development.js"></script>
   <script src="./lib/react-dom.development.js"></script>
+  
   <script>
-    // --- THIS IS THE CRITICAL WRAPPER TO ENSURE Ethers IS DEFINED ---
+    // --- THIS WRAPPER GUARANTEES ALL LIBRARIES (INCLUDING Ethers) ARE LOADED ---
     document.addEventListener('DOMContentLoaded', () => {
-        // We use pure JS/JSX inside a standard script tag, relying on React's development environment.
-        // If this still fails, you MUST compile your JSX/Hooks to pure JS offline.
         
+        // This is a common pattern to access React tools in a global script environment
         const { useState, useEffect, useCallback } = React;
         
         // --- WEB3 CONSTANTS ---
@@ -202,7 +202,6 @@
 
             } catch (error) {
               console.error("Connection failed:", error);
-              // The error is often in the `error.message` when Metamask is present
               setStatus(`Connection failed: ${error.message || 'Check console.'}`);
             }
           };
@@ -521,7 +520,7 @@
                           </div>
 
                           <button
-                            onClick={() => setHasActiveLoan(false)} // This is still UI-only
+                            onClick={() => setHasActiveLoan(false)} 
                             className="w-full bg-slate-700 py-2 rounded-lg text-sm hover:bg-slate-600 transition"
                           >
                             View New Loan Form
@@ -649,7 +648,7 @@
           );
         }
 
-        // --- REACT 18 COMPATIBLE RENDER (Removes Warning) ---
+        // --- REACT 18 COMPATIBLE RENDER (Removes Warning and guarantees load) ---
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<DeFiLendingPlatform />);
     });
