@@ -1,17 +1,14 @@
 [build]
+  # 1. Base Directory: Isolates the build to the 'frontend' folder
   base = "frontend"
-  # We explicitly set the publish directory to the frontend folder.
+  
+  # 2. Publish Directory: Publishes the contents of the base directory (the 'frontend' folder itself)
   publish = "."
   
-  # We set a dummy build command that doesn't run npm install.
-  # This skips the Hardhat dependency installation which causes ERESOLVE errors.
+  # 3. Command: Skips the Hardhat npm install process
   command = "echo 'Skipping npm install for static frontend'"
   
-  # The base directory where Netlify should start the build.
-  # We point it directly at the frontend folder.
-
-# We must add a minimal redirection rule to fix any potential 404 issues 
-# when loading assets like /lib/ethers.min.js
+# 4. Redirects: Essential for SPA/Asset loading when a path is not found
 [[redirects]]
   from = "/*"
   to = "/index.html"
