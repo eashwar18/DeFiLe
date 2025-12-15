@@ -1,4 +1,5 @@
 [build]
+  base = "frontend"
   # We explicitly set the publish directory to the frontend folder.
   publish = "."
   
