@@ -43,7 +43,7 @@
   
   <script type=""text/babel">
     // --- THIS WRAPPER GUARANTEES ALL LIBRARIES ARE LOADED BEFORE EXECUTION ---
-    document.addEventListener('DOMContentLoaded', () => {
+    
         
         const { useState, useEffect, useCallback } = React;
         
@@ -651,7 +651,7 @@
         // --- REACT 18 COMPATIBLE RENDER (Removes Warning and guarantees load) ---
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<DeFiLendingPlatform />);
-    });
+    
   </script>
 </body>
 </html>
